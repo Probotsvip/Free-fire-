@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, Trophy, Crown, Wallet, User, Gamepad2, LogIn, LogOut } from "lucide-react";
+import { Home, Trophy, Crown, Wallet, User, Gamepad2, LogIn, LogOut, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import AuthModal from "@/components/auth/auth-modal";
@@ -26,6 +26,7 @@ export default function Navbar() {
     { path: "/leaderboard", label: "Leaderboard", icon: Crown },
     { path: "/wallet", label: "Wallet", icon: Wallet },
     { path: "/profile", label: "Profile", icon: User },
+    ...(user?.role === 'admin' ? [{ path: "/admin", label: "Admin", icon: Settings }] : []),
   ];
 
   return (

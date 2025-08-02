@@ -596,6 +596,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin APIs
+  app.get("/api/admin/users", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.get("/api/admin/advertisements", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const advertisements = await storage.getAllAdvertisements();
+      res.json(advertisements);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch advertisements" });
+    }
+  });
+
+  app.post("/api/admin/advertisements", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const ad = await storage.createAdvertisement(req.body);
+      res.json(ad);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create advertisement" });
+    }
+  });
+
+  app.patch("/api/admin/advertisements/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const ad = await storage.updateAdvertisement(req.params.id, req.body);
+      res.json(ad);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update advertisement" });
+    }
+  });
+
+  app.delete("/api/admin/advertisements/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      await storage.deleteAdvertisement(req.params.id);
+      res.json({ message: "Advertisement deleted" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete advertisement" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/status", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const { isActive } = req.body;
+      const user = await storage.updateUser(req.params.id, { isActive });
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update user status" });
+    }
+  });
+
+  app.get("/api/admin/analytics", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const totalUsers = await storage.getUsersCount();
+      const totalTournaments = await storage.getTournamentsCount();
+      const activeUsers = await storage.getActiveUsersCount();
+      res.json({
+        totalUsers,
+        totalTournaments,
+        activeUsers,
+        totalRevenue: "0"
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch analytics" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

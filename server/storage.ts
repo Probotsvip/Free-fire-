@@ -32,7 +32,10 @@ import {
   type DailyBonus,
   type InsertDailyBonus,
   type TournamentTemplate,
-  type InsertTournamentTemplate
+  type InsertTournamentTemplate,
+  advertisements,
+  type Advertisement,
+  type InsertAdvertisement
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql, count } from "drizzle-orm";
@@ -119,6 +122,16 @@ export interface IStorage {
   getUsersCount(): Promise<number>;
   getTournamentsCount(): Promise<number>;
   getActiveUsersCount(): Promise<number>;
+
+  // Advertisements
+  getAllAdvertisements(): Promise<Advertisement[]>;
+  createAdvertisement(advertisement: InsertAdvertisement): Promise<Advertisement>;
+  getAdvertisementById(id: string): Promise<Advertisement | null>;
+  updateAdvertisement(id: string, updates: Partial<InsertAdvertisement>): Promise<Advertisement>;
+  deleteAdvertisement(id: string): Promise<void>;
+  getActiveAdvertisementsByPosition(position: string): Promise<Advertisement[]>;
+  incrementAdImpressions(id: string): Promise<void>;
+  incrementAdClicks(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -618,6 +631,54 @@ export class DatabaseStorage implements IStorage {
       .values(insertTemplate)
       .returning();
     return template;
+  }
+
+  // Advertisement methods
+  async getAllAdvertisements(): Promise<Advertisement[]> {
+    return db.select().from(advertisements).orderBy(desc(advertisements.createdAt));
+  }
+
+  async createAdvertisement(advertisement: InsertAdvertisement): Promise<Advertisement> {
+    const [result] = await db.insert(advertisements).values(advertisement).returning();
+    return result;
+  }
+
+  async getAdvertisementById(id: string): Promise<Advertisement | null> {
+    const [ad] = await db.select().from(advertisements).where(eq(advertisements.id, id));
+    return ad || null;
+  }
+
+  async updateAdvertisement(id: string, updates: Partial<InsertAdvertisement>): Promise<Advertisement> {
+    const [result] = await db.update(advertisements)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(advertisements.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteAdvertisement(id: string): Promise<void> {
+    await db.delete(advertisements).where(eq(advertisements.id, id));
+  }
+
+  async getActiveAdvertisementsByPosition(position: string): Promise<Advertisement[]> {
+    return db.select().from(advertisements)
+      .where(and(
+        eq(advertisements.isActive, true),
+        eq(advertisements.position, position)
+      ))
+      .orderBy(desc(advertisements.createdAt));
+  }
+
+  async incrementAdImpressions(id: string): Promise<void> {
+    await db.update(advertisements)
+      .set({ impressions: sql`${advertisements.impressions} + 1` })
+      .where(eq(advertisements.id, id));
+  }
+
+  async incrementAdClicks(id: string): Promise<void> {
+    await db.update(advertisements)
+      .set({ clicks: sql`${advertisements.clicks} + 1` })
+      .where(eq(advertisements.id, id));
   }
 }
 

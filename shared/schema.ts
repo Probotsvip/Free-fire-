@@ -210,6 +210,24 @@ export const tournamentTemplates = pgTable("tournament_templates", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Advertisement system
+export const advertisements = pgTable("advertisements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  targetUrl: text("target_url"),
+  type: text("type").notNull().default("banner"), // "banner", "popup", "native", "video"
+  position: text("position").notNull().default("home_top"), // "home_top", "home_bottom", "tournaments", "wallet", "profile"
+  isActive: boolean("is_active").notNull().default(true),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  impressions: integer("impressions").notNull().default(0),
+  clicks: integer("clicks").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -282,6 +300,14 @@ export const insertTournamentTemplateSchema = createInsertSchema(tournamentTempl
   createdAt: true,
 });
 
+export const insertAdvertisementSchema = createInsertSchema(advertisements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  impressions: true,
+  clicks: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -318,3 +344,5 @@ export type InsertDailyBonus = z.infer<typeof insertDailyBonusSchema>;
 
 export type TournamentTemplate = typeof tournamentTemplates.$inferSelect;
 export type InsertTournamentTemplate = z.infer<typeof insertTournamentTemplateSchema>;
+export type Advertisement = typeof advertisements.$inferSelect;
+export type InsertAdvertisement = z.infer<typeof insertAdvertisementSchema>;
