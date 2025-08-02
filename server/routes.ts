@@ -1,10 +1,189 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import express from "express";
+import session from "express-session";
 import { storage } from "./storage";
-import { insertTournamentSchema, insertRegistrationSchema, insertTransactionSchema } from "@shared/schema";
+import { insertTournamentSchema, insertRegistrationSchema, insertTransactionSchema, insertUserSchema } from "@shared/schema";
 import { z } from "zod";
+import bcrypt from "bcrypt";
+import connectPg from "connect-pg-simple";
+
+// Session configuration
+const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
+const pgStore = connectPg(session);
+const sessionStore = new pgStore({
+  conString: process.env.DATABASE_URL,
+  createTableIfMissing: true,
+  ttl: sessionTtl,
+  tableName: "sessions",
+});
+
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || "your-secret-key-here",
+  store: sessionStore,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: false, // Set to true in production with HTTPS
+    maxAge: sessionTtl,
+  },
+};
+
+// Authentication middleware
+interface AuthenticatedRequest extends Request {
+  user?: any;
+}
+
+const isAuthenticated = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  if (req.session && (req.session as any).userId) {
+    req.user = { id: (req.session as any).userId };
+    return next();
+  }
+  return res.status(401).json({ message: "Unauthorized" });
+};
+
+const isAdmin = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  
+  const user = await storage.getUser(req.user.id);
+  if (!user || user.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  
+  req.user = user;
+  next();
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Middleware
+  app.use(express.json());
+  app.use(session(sessionConfig));
+  
+  // Authentication routes
+  app.post("/api/auth/signup", async (req, res) => {
+    try {
+      const { username, email, password } = insertUserSchema.parse(req.body);
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "User with this email already exists" });
+      }
+      
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+      
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 12);
+      
+      // Create user
+      const user = await storage.createUser({
+        username,
+        email,
+        password: hashedPassword,
+      });
+      
+      // Create session
+      (req.session as any).userId = user.id;
+      
+      // Remove password from response
+      const { password: _, ...userWithoutPassword } = user;
+      res.status(201).json({ user: userWithoutPassword });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
+      }
+      console.error("Signup error:", error);
+      res.status(500).json({ message: "Failed to create account" });
+    }
+  });
+  
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+      
+      // Find user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      // Check password
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      // Update last login
+      await storage.updateUserLastLogin(user.id);
+      
+      // Create session
+      (req.session as any).userId = user.id;
+      
+      // Remove password from response
+      const { password: _, ...userWithoutPassword } = user;
+      res.json({ user: userWithoutPassword });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+  
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Failed to logout" });
+      }
+      res.clearCookie('connect.sid');
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+  
+  app.get("/api/auth/user", async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!(req.session as any)?.userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Remove password from response
+      const { password: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Get user error:", error);
+      res.status(500).json({ message: "Failed to get user" });
+    }
+  });
+  
+  app.post("/api/users/:userId/update-last-login", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.params.userId;
+      
+      if (req.user?.id !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const user = await storage.updateUserLastLogin(userId);
+      const { password: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Update last login error:", error);
+      res.status(500).json({ message: "Failed to update last login" });
+    }
+  });
   // Get all tournaments
   app.get("/api/tournaments", async (req, res) => {
     try {
@@ -36,10 +215,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create tournament
-  app.post("/api/tournaments", async (req, res) => {
+  // Create tournament (admin only)
+  app.post("/api/tournaments", isAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const validatedData = insertTournamentSchema.parse(req.body);
+      const validatedData = insertTournamentSchema.parse({
+        ...req.body,
+        createdBy: req.user!.id,
+      });
       const tournament = await storage.createTournament(validatedData);
       res.status(201).json(tournament);
     } catch (error) {
@@ -50,10 +232,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Join tournament
-  app.post("/api/tournaments/:id/join", async (req, res) => {
+  // Join tournament (requires authentication)
+  app.post("/api/tournaments/:id/join", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
-      const { userId } = req.body;
+      const userId = req.user!.id;
       const tournamentId = req.params.id;
 
       // Check if tournament exists
@@ -108,8 +290,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get user registrations
-  app.get("/api/users/:userId/registrations", async (req, res) => {
+  // Get user registrations (requires authentication)
+  app.get("/api/users/:userId/registrations", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const registrations = await storage.getUserRegistrations(req.params.userId);
       
@@ -127,8 +309,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get user profile
-  app.get("/api/users/:id", async (req, res) => {
+  // Get user profile (requires authentication for own profile)
+  app.get("/api/users/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const user = await storage.getUser(req.params.id);
       if (!user) {
@@ -154,8 +336,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Add money to wallet
-  app.post("/api/users/:userId/add-money", async (req, res) => {
+  // Add money to wallet (requires authentication)
+  app.post("/api/users/:userId/add-money", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const { amount } = req.body;
       const userId = req.params.userId;
@@ -187,8 +369,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get user transactions
-  app.get("/api/users/:userId/transactions", async (req, res) => {
+  // Get user transactions (requires authentication)
+  app.get("/api/users/:userId/transactions", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const transactions = await storage.getUserTransactions(req.params.userId);
       res.json(transactions);
@@ -197,8 +379,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Submit tournament result (mock endpoint for demo)
-  app.post("/api/tournaments/:id/results", async (req, res) => {
+  // Submit tournament result (admin only)
+  app.post("/api/tournaments/:id/results", isAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { userId, position, kills } = req.body;
       const tournamentId = req.params.id;

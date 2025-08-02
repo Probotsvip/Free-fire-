@@ -4,21 +4,38 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Navbar from "@/components/navbar";
+import { useAuth } from "@/hooks/useAuth";
 import Home from "@/pages/home";
 import Tournaments from "@/pages/tournaments";
 import Leaderboard from "@/pages/leaderboard";
 import Wallet from "@/pages/wallet";
 import Profile from "@/pages/profile";
 import NotFound from "@/pages/not-found";
+import AdminPanel from "@/pages/admin";
 
 function Router() {
+  const { isAuthenticated, isAdmin, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/tournaments" component={Tournaments} />
       <Route path="/leaderboard" component={Leaderboard} />
-      <Route path="/wallet" component={Wallet} />
-      <Route path="/profile" component={Profile} />
+      {isAuthenticated && (
+        <>
+          <Route path="/wallet" component={Wallet} />
+          <Route path="/profile" component={Profile} />
+          {isAdmin && <Route path="/admin" component={AdminPanel} />}
+        </>
+      )}
       <Route component={NotFound} />
     </Switch>
   );

@@ -1,14 +1,23 @@
 import { 
+  users,
+  tournaments,
+  registrations,
+  transactions,
+  notifications,
   type User, 
   type InsertUser, 
+  type UpsertUser,
   type Tournament, 
   type InsertTournament,
   type Registration,
   type InsertRegistration,
   type Transaction,
-  type InsertTransaction
+  type InsertTransaction,
+  type Notification,
+  type InsertNotification
 } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { db } from "./db";
+import { eq, desc, and, sql, count } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -16,8 +25,10 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  upsertUser(user: UpsertUser): Promise<User>;
   updateUserBalance(userId: string, amount: string): Promise<User>;
   updateUserStats(userId: string, stats: { tournamentsWon?: number; totalEarnings?: string; gamesPlayed?: number }): Promise<User>;
+  updateUserLastLogin(userId: string): Promise<User>;
 
   // Tournaments
   getTournament(id: string): Promise<Tournament | undefined>;
@@ -26,6 +37,7 @@ export interface IStorage {
   createTournament(tournament: InsertTournament): Promise<Tournament>;
   updateTournament(id: string, updates: Partial<Tournament>): Promise<Tournament>;
   incrementTournamentPlayers(id: string): Promise<Tournament>;
+  getTournamentsByCreator(createdBy: string): Promise<Tournament[]>;
 
   // Registrations
   getRegistration(userId: string, tournamentId: string): Promise<Registration | undefined>;
@@ -38,266 +50,279 @@ export interface IStorage {
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   getUserTransactions(userId: string): Promise<Transaction[]>;
 
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getUserNotifications(userId: string): Promise<Notification[]>;
+  markNotificationAsRead(id: string): Promise<Notification>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
+
   // Leaderboard
   getTopEarners(limit?: number): Promise<(User & { weeklyEarnings?: string })[]>;
+
+  // Admin
+  getAllUsers(): Promise<User[]>;
+  getUsersCount(): Promise<number>;
+  getTournamentsCount(): Promise<number>;
+  getActiveUsersCount(): Promise<number>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-  private tournaments: Map<string, Tournament>;
-  private registrations: Map<string, Registration>;
-  private transactions: Map<string, Transaction>;
-
-  constructor() {
-    this.users = new Map();
-    this.tournaments = new Map();
-    this.registrations = new Map();
-    this.transactions = new Map();
-
-    // Initialize with sample data
-    this.initializeSampleData();
-  }
-
-  private initializeSampleData() {
-    // Create sample user
-    const sampleUser: User = {
-      id: "user-1",
-      username: "ProGamer2023",
-      email: "progamer@example.com",
-      password: "hashed_password",
-      balance: "2850.00",
-      totalEarnings: "45620.00",
-      tournamentsWon: 12,
-      gamesPlayed: 45,
-      avatar: null,
-      createdAt: new Date(),
-    };
-    this.users.set(sampleUser.id, sampleUser);
-
-    // Create sample tournaments
-    const tournaments: Tournament[] = [
-      {
-        id: "tournament-1",
-        title: "PUBG Mobile Clash",
-        game: "PUBG",
-        gameMode: "squad",
-        map: "Erangel",
-        prizePool: "10000.00",
-        entryFee: "50.00",
-        maxPlayers: 100,
-        currentPlayers: 85,
-        status: "live",
-        startTime: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        endTime: null,
-        firstPrize: "5000.00",
-        secondPrize: "3000.00",
-        thirdPrize: "2000.00",
-        createdAt: new Date(),
-      },
-      {
-        id: "tournament-2",
-        title: "PUBG Pro Championship",
-        game: "PUBG",
-        gameMode: "squad",
-        map: "Sanhok",
-        prizePool: "50000.00",
-        entryFee: "200.00",
-        maxPlayers: 100,
-        currentPlayers: 85,
-        status: "upcoming",
-        startTime: new Date(Date.now() + 2.5 * 60 * 60 * 1000), // 2.5 hours from now
-        endTime: null,
-        firstPrize: "25000.00",
-        secondPrize: "15000.00",
-        thirdPrize: "10000.00",
-        createdAt: new Date(),
-      },
-      {
-        id: "tournament-3",
-        title: "Free Fire Battle Royale",
-        game: "FREE_FIRE",
-        gameMode: "solo",
-        map: "Bermuda",
-        prizePool: "25000.00",
-        entryFee: "100.00",
-        maxPlayers: 50,
-        currentPlayers: 45,
-        status: "live",
-        startTime: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
-        endTime: null,
-        firstPrize: "12500.00",
-        secondPrize: "7500.00",
-        thirdPrize: "5000.00",
-        createdAt: new Date(),
-      },
-    ];
-
-    tournaments.forEach(tournament => {
-      this.tournaments.set(tournament.id, tournament);
-    });
-  }
-
+export class DatabaseStorage implements IStorage {
   // Users
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.username === username);
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = {
-      ...insertUser,
-      id,
-      balance: "0.00",
-      totalEarnings: "0.00",
-      tournamentsWon: 0,
-      gamesPlayed: 0,
-      createdAt: new Date(),
-    };
-    this.users.set(id, user);
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
     return user;
   }
 
   async updateUserBalance(userId: string, amount: string): Promise<User> {
-    const user = this.users.get(userId);
+    const [user] = await db
+      .update(users)
+      .set({ balance: amount, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
     if (!user) throw new Error("User not found");
-    
-    const updatedUser = { ...user, balance: amount };
-    this.users.set(userId, updatedUser);
-    return updatedUser;
+    return user;
   }
 
   async updateUserStats(userId: string, stats: { tournamentsWon?: number; totalEarnings?: string; gamesPlayed?: number }): Promise<User> {
-    const user = this.users.get(userId);
+    const [user] = await db
+      .update(users)
+      .set({ ...stats, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
     if (!user) throw new Error("User not found");
-    
-    const updatedUser = { ...user, ...stats };
-    this.users.set(userId, updatedUser);
-    return updatedUser;
+    return user;
+  }
+
+  async updateUserLastLogin(userId: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ lastLogin: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    if (!user) throw new Error("User not found");
+    return user;
   }
 
   // Tournaments
   async getTournament(id: string): Promise<Tournament | undefined> {
-    return this.tournaments.get(id);
+    const [tournament] = await db.select().from(tournaments).where(eq(tournaments.id, id));
+    return tournament;
   }
 
   async getAllTournaments(): Promise<Tournament[]> {
-    return Array.from(this.tournaments.values()).sort((a, b) => 
-      new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
-    );
+    return await db.select().from(tournaments).orderBy(desc(tournaments.createdAt));
   }
 
   async getTournamentsByStatus(status: string): Promise<Tournament[]> {
-    return Array.from(this.tournaments.values())
-      .filter(tournament => tournament.status === status)
-      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    return await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.status, status as any))
+      .orderBy(tournaments.startTime);
   }
 
   async createTournament(insertTournament: InsertTournament): Promise<Tournament> {
-    const id = randomUUID();
-    const tournament: Tournament = {
-      ...insertTournament,
-      id,
-      currentPlayers: 0,
-      createdAt: new Date(),
-    };
-    this.tournaments.set(id, tournament);
+    const [tournament] = await db
+      .insert(tournaments)
+      .values(insertTournament)
+      .returning();
     return tournament;
   }
 
   async updateTournament(id: string, updates: Partial<Tournament>): Promise<Tournament> {
-    const tournament = this.tournaments.get(id);
+    const [tournament] = await db
+      .update(tournaments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(tournaments.id, id))
+      .returning();
     if (!tournament) throw new Error("Tournament not found");
-    
-    const updatedTournament = { ...tournament, ...updates };
-    this.tournaments.set(id, updatedTournament);
-    return updatedTournament;
+    return tournament;
   }
 
   async incrementTournamentPlayers(id: string): Promise<Tournament> {
-    const tournament = this.tournaments.get(id);
+    const [tournament] = await db
+      .update(tournaments)
+      .set({ 
+        currentPlayers: sql`${tournaments.currentPlayers} + 1`,
+        updatedAt: new Date()
+      })
+      .where(eq(tournaments.id, id))
+      .returning();
     if (!tournament) throw new Error("Tournament not found");
-    
-    const updatedTournament = { ...tournament, currentPlayers: tournament.currentPlayers + 1 };
-    this.tournaments.set(id, updatedTournament);
-    return updatedTournament;
+    return tournament;
+  }
+
+  async getTournamentsByCreator(createdBy: string): Promise<Tournament[]> {
+    return await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.createdBy, createdBy))
+      .orderBy(desc(tournaments.createdAt));
   }
 
   // Registrations
   async getRegistration(userId: string, tournamentId: string): Promise<Registration | undefined> {
-    return Array.from(this.registrations.values()).find(
-      reg => reg.userId === userId && reg.tournamentId === tournamentId
-    );
+    const [registration] = await db
+      .select()
+      .from(registrations)
+      .where(and(eq(registrations.userId, userId), eq(registrations.tournamentId, tournamentId)));
+    return registration;
   }
 
   async getTournamentRegistrations(tournamentId: string): Promise<Registration[]> {
-    return Array.from(this.registrations.values()).filter(reg => reg.tournamentId === tournamentId);
+    return await db
+      .select()
+      .from(registrations)
+      .where(eq(registrations.tournamentId, tournamentId));
   }
 
   async getUserRegistrations(userId: string): Promise<Registration[]> {
-    return Array.from(this.registrations.values()).filter(reg => reg.userId === userId);
+    return await db
+      .select()
+      .from(registrations)
+      .where(eq(registrations.userId, userId))
+      .orderBy(desc(registrations.registeredAt));
   }
 
   async createRegistration(insertRegistration: InsertRegistration): Promise<Registration> {
-    const id = randomUUID();
-    const registration: Registration = {
-      ...insertRegistration,
-      id,
-      position: null,
-      kills: 0,
-      earnings: "0.00",
-      registeredAt: new Date(),
-    };
-    this.registrations.set(id, registration);
+    const [registration] = await db
+      .insert(registrations)
+      .values(insertRegistration)
+      .returning();
     return registration;
   }
 
   async updateRegistrationResult(id: string, result: { position: number; kills: number; earnings: string }): Promise<Registration> {
-    const registration = this.registrations.get(id);
+    const [registration] = await db
+      .update(registrations)
+      .set(result)
+      .where(eq(registrations.id, id))
+      .returning();
     if (!registration) throw new Error("Registration not found");
-    
-    const updatedRegistration = { ...registration, ...result };
-    this.registrations.set(id, updatedRegistration);
-    return updatedRegistration;
+    return registration;
   }
 
   // Transactions
   async createTransaction(insertTransaction: InsertTransaction): Promise<Transaction> {
-    const id = randomUUID();
-    const transaction: Transaction = {
-      ...insertTransaction,
-      id,
-      createdAt: new Date(),
-    };
-    this.transactions.set(id, transaction);
+    const [transaction] = await db
+      .insert(transactions)
+      .values(insertTransaction)
+      .returning();
     return transaction;
   }
 
   async getUserTransactions(userId: string): Promise<Transaction[]> {
-    return Array.from(this.transactions.values())
-      .filter(transaction => transaction.userId === userId)
-      .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+    return await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.userId, userId))
+      .orderBy(desc(transactions.createdAt));
+  }
+
+  // Notifications
+  async createNotification(insertNotification: InsertNotification): Promise<Notification> {
+    const [notification] = await db
+      .insert(notifications)
+      .values(insertNotification)
+      .returning();
+    return notification;
+  }
+
+  async getUserNotifications(userId: string): Promise<Notification[]> {
+    return await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt));
+  }
+
+  async markNotificationAsRead(id: string): Promise<Notification> {
+    const [notification] = await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, id))
+      .returning();
+    if (!notification) throw new Error("Notification not found");
+    return notification;
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
   }
 
   // Leaderboard
   async getTopEarners(limit: number = 10): Promise<(User & { weeklyEarnings?: string })[]> {
-    const users = Array.from(this.users.values())
-      .sort((a, b) => parseFloat(b.totalEarnings) - parseFloat(a.totalEarnings))
-      .slice(0, limit);
+    const topUsers = await db
+      .select()
+      .from(users)
+      .orderBy(desc(users.totalEarnings))
+      .limit(limit);
     
-    // Add mock weekly earnings for demo
-    return users.map(user => ({
+    // Add mock weekly earnings for demo (in real app, calculate from transactions)
+    return topUsers.map(user => ({
       ...user,
       weeklyEarnings: (parseFloat(user.totalEarnings) * 0.1).toFixed(2),
     }));
   }
+
+  // Admin functions
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async getUsersCount(): Promise<number> {
+    const [result] = await db.select({ count: count() }).from(users);
+    return result.count;
+  }
+
+  async getTournamentsCount(): Promise<number> {
+    const [result] = await db.select({ count: count() }).from(tournaments);
+    return result.count;
+  }
+
+  async getActiveUsersCount(): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(users)
+      .where(eq(users.isActive, true));
+    return result.count;
+  }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

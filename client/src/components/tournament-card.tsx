@@ -19,11 +19,11 @@ export default function TournamentCard({
   const getStatusBadge = () => {
     switch (tournament.status) {
       case "live":
-        return <Badge className="bg-gaming-red text-white animate-pulse">LIVE</Badge>;
+        return <Badge className="status-live text-white font-bold px-3 py-1 animate-pulse-glow">● LIVE</Badge>;
       case "upcoming":
-        return <Badge className="bg-gaming-amber text-gaming-dark">Upcoming</Badge>;
+        return <Badge className="status-upcoming text-primary font-bold px-3 py-1">⏰ Upcoming</Badge>;
       case "completed":
-        return <Badge className="bg-gray-600 text-white">Completed</Badge>;
+        return <Badge className="status-completed text-white font-medium px-3 py-1">✓ Completed</Badge>;
       default:
         return null;
     }
@@ -49,38 +49,45 @@ export default function TournamentCard({
   const progress = (tournament.currentPlayers / tournament.maxPlayers) * 100;
 
   return (
-    <div className="tournament-card rounded-xl p-4 gaming-card-hover cursor-pointer">
+    <div className="tournament-card mobile-card card-hover-effect mobile-optimized cursor-pointer">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center space-x-3">
-          <img 
-            src={getGameImage()} 
-            alt={`${tournament.game} tournament`} 
-            className="w-12 h-12 rounded-lg object-cover"
-          />
-          <div>
-            <h3 className="font-semibold text-sm text-white">{tournament.title}</h3>
-            <div className="flex items-center space-x-2 text-xs text-gray-400">
-              <span className="capitalize">{tournament.gameMode}</span>
+          <div className="relative">
+            <img 
+              src={getGameImage()} 
+              alt={`${tournament.game} tournament`} 
+              className="w-12 h-12 rounded-lg object-cover"
+            />
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-blue rounded-full border-2 border-primary flex items-center justify-center">
+              <span className="text-xs font-bold text-white">{tournament.game === 'PUBG' ? 'P' : 'F'}</span>
+            </div>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-sm text-white leading-tight mb-1">{tournament.title}</h3>
+            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+              <span className="capitalize font-medium">{tournament.gameMode}</span>
               <span>•</span>
-              <span>{tournament.map}</span>
+              <span className="font-medium">{tournament.map}</span>
             </div>
           </div>
         </div>
         {getStatusBadge()}
       </div>
       
-      <div className="space-y-2 mb-4">
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-400">Prize Pool:</span>
-          <span className="text-gaming-green font-semibold">₹{tournament.prizePool}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-400">Entry Fee:</span>
-          <span className="text-white font-medium">₹{tournament.entryFee}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-400">Players:</span>
-          <span className="text-gaming-cyan">{tournament.currentPlayers}/{tournament.maxPlayers}</span>
+      <div className="space-y-3 mb-4">
+        <div className="premium-glass p-3 rounded-lg">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-muted-foreground text-xs font-medium">Prize Pool</span>
+            <span className="text-success font-bold text-lg">₹{tournament.prizePool}</span>
+          </div>
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-muted-foreground text-xs font-medium">Entry Fee</span>
+            <span className="text-warning font-semibold">₹{tournament.entryFee}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground text-xs font-medium">Players</span>
+            <span className="text-cyan font-semibold">{tournament.currentPlayers}/{tournament.maxPlayers}</span>
+          </div>
         </div>
       </div>
 
@@ -98,47 +105,54 @@ export default function TournamentCard({
           <span>Progress</span>
           <span>{Math.round(progress)}%</span>
         </div>
-        <div className="w-full bg-gray-700 rounded-full h-2">
+        <div className="w-full bg-secondary rounded-full h-2.5 overflow-hidden">
           <div 
-            className="bg-gradient-to-r from-gaming-cyan to-gaming-purple h-2 rounded-full transition-all duration-300" 
-            style={{ width: `${progress}%` }}
+            className="h-full rounded-full transition-all duration-500 ease-out"
+            style={{ 
+              width: `${progress}%`,
+              background: 'var(--gradient-primary)'
+            }}
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-4 text-xs">
-        <div className="text-center">
-          <div className="text-gray-400">1st Prize</div>
-          <div className="font-semibold text-gaming-green">₹{tournament.firstPrize}</div>
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="text-center p-2 glass-effect rounded-lg">
+          <div className="text-muted-foreground text-xs mb-1">1st</div>
+          <div className="font-bold text-warning text-sm">₹{tournament.firstPrize}</div>
         </div>
-        <div className="text-center">
-          <div className="text-gray-400">2nd Prize</div>
-          <div className="font-semibold text-gaming-amber">₹{tournament.secondPrize}</div>
+        <div className="text-center p-2 glass-effect rounded-lg">
+          <div className="text-muted-foreground text-xs mb-1">2nd</div>
+          <div className="font-bold text-cyan text-sm">₹{tournament.secondPrize}</div>
         </div>
-        <div className="text-center">
-          <div className="text-gray-400">3rd Prize</div>
-          <div className="font-semibold text-orange-400">₹{tournament.thirdPrize}</div>
+        <div className="text-center p-2 glass-effect rounded-lg">
+          <div className="text-muted-foreground text-xs mb-1">3rd</div>
+          <div className="font-bold text-orange text-sm">₹{tournament.thirdPrize}</div>
         </div>
       </div>
 
       {showActions && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {tournament.status === "live" ? (
             <Button 
-              className="w-full bg-gaming-red hover:bg-red-600 text-white"
+              className="w-full gaming-button mobile-optimized bg-danger hover:bg-danger/90"
               onClick={() => onWatch?.(tournament.id)}
             >
               <Zap className="mr-2 h-4 w-4" />
-              Watch Live
+              <span className="font-bold">Watch Live</span>
             </Button>
           ) : tournament.status === "upcoming" ? (
             <Button 
-              className="w-full gaming-gradient hover:from-cyan-400 hover:to-purple-600 text-white"
+              className={`w-full mobile-optimized font-bold ${
+                tournament.currentPlayers >= tournament.maxPlayers 
+                  ? "bg-secondary text-muted-foreground cursor-not-allowed" 
+                  : "gaming-button"
+              }`}
               onClick={() => onJoin?.(tournament.id)}
               disabled={tournament.currentPlayers >= tournament.maxPlayers}
             >
-              <Trophy className="mr-2 h-4 w-4" />
-              {tournament.currentPlayers >= tournament.maxPlayers ? "Tournament Full" : "Join Tournament"}
+              <Trophy className="mr-2 h-5 w-5" />
+              <span>{tournament.currentPlayers >= tournament.maxPlayers ? "Tournament Full" : "Join Now"}</span>
             </Button>
           ) : null}
         </div>
