@@ -246,44 +246,46 @@ export default function WalletPage() {
           <p className="text-gray-400">Manage your gaming funds and transaction history</p>
         </div>
 
-        {/* Enhanced Wallet Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        {/* Enhanced Mobile-First Wallet Overview Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <Card className="glass-effect border-gray-600">
-            <CardContent className="p-6 text-center">
-              <Wallet className="h-8 w-8 text-gaming-cyan mb-3 mx-auto" />
-              <h3 className="text-sm text-gray-400 mb-1">Cash Balance</h3>
-              <div className="text-2xl font-bold text-gaming-green">
+            <CardContent className="p-4 text-center">
+              <Wallet className="h-6 w-6 text-gaming-cyan mb-2 mx-auto" />
+              <h3 className="text-xs text-gray-400 mb-1">Cash Balance</h3>
+              <div className="text-lg lg:text-xl font-bold text-gaming-green">
                 ₹{user?.balance || "0.00"}
-              </div></CardContent>
+              </div>
+            </CardContent>
           </Card>
 
           <Card className="glass-effect border-gray-600">
-            <CardContent className="p-6 text-center">
-              <Heart className="h-8 w-8 text-gaming-red mb-3 mx-auto" />
-              <h3 className="text-sm text-gray-400 mb-1">DIL Balance</h3>
-              <div className="text-2xl font-bold text-gaming-red">
+            <CardContent className="p-4 text-center">
+              <Heart className="h-6 w-6 text-gaming-red mb-2 mx-auto" />
+              <h3 className="text-xs text-gray-400 mb-1">DIL Balance</h3>
+              <div className="text-lg lg:text-xl font-bold text-gaming-red">
                 {dilData?.dilBalance || 0}
               </div>
             </CardContent>
           </Card>
 
           <Card className="glass-effect border-gray-600">
-            <CardContent className="p-6 text-center">
-              <Award className="h-8 w-8 text-gaming-amber mb-3 mx-auto" />
-              <h3 className="text-sm text-gray-400 mb-1">Medals</h3>
-              <div className="text-2xl font-bold text-gaming-amber">
+            <CardContent className="p-4 text-center">
+              <Award className="h-6 w-6 text-gaming-amber mb-2 mx-auto" />
+              <h3 className="text-xs text-gray-400 mb-1">Medals</h3>
+              <div className="text-lg lg:text-xl font-bold text-gaming-amber">
                 {user?.medals || 0}
               </div>
             </CardContent>
           </Card>
 
           <Card className="glass-effect border-gray-600">
-            <CardContent className="p-6 text-center">
-              <Zap className="h-8 w-8 text-gaming-purple mb-3 mx-auto" />
-              <h3 className="text-sm text-gray-400 mb-1">Total DIL Earned</h3>
-              <div className="text-2xl font-bold text-gaming-purple">
+            <CardContent className="p-4 text-center">
+              <Zap className="h-6 w-6 text-gaming-purple mb-2 mx-auto" />
+              <h3 className="text-xs text-gray-400 mb-1">Total DIL</h3>
+              <div className="text-lg lg:text-xl font-bold text-gaming-purple">
                 {dilData?.totalDilEarned || 0}
-              </div></CardContent>
+              </div>
+            </CardContent>
           </Card>
         </div>
 
@@ -311,67 +313,82 @@ export default function WalletPage() {
           </Card>
         )}
 
-        {/* Enhanced Action Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {/* Mobile-First Action Cards - Stack Vertically */}
+        <div className="space-y-4 mb-6">
+          
+          {/* Add Money Card */}
           <Card className="glass-effect border-gray-600">
-            <CardContent className="p-6 text-center">
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button className="mt-3 w-full bg-gaming-cyan hover:bg-cyan-400 text-gaming-dark">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Money
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="bg-gaming-navy border-gray-600 text-white">
-                  <DialogHeader>
-                    <DialogTitle>Add Money to Wallet</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="amount">Amount (₹)</Label>
-                      <Input
-                        id="amount"
-                        type="number"
-                        placeholder="Enter amount"
-                        value={addAmount}
-                        onChange={(e) => setAddAmount(e.target.value)}
-                        className="bg-gaming-dark border-gray-600 text-white"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {["100", "500", "1000", "2000"].map((amount) => (
-                        <Button
-                          key={amount}
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setAddAmount(amount)}
-                          className="border-gray-600 hover:bg-gaming-cyan hover:text-gaming-dark"
-                        >
-                          ₹{amount}
-                        </Button>
-                      ))}
-                    </div>
-                    <Button
-                      onClick={handleAddMoney}
-                      disabled={addMoneyMutation.isPending}
-                      className="w-full bg-gaming-cyan hover:bg-cyan-400 text-gaming-dark"
-                    >
-                      {addMoneyMutation.isPending ? "Processing..." : "Add Money"}
-                    </Button>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Plus className="h-6 w-6 text-gaming-cyan" />
+                  <div>
+                    <h3 className="font-semibold text-white">Add Money</h3>
+                    <p className="text-sm text-gray-400">Fund your gaming wallet</p>
                   </div>
-                </DialogContent>
-              </Dialog>
+                </div>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button className="bg-gaming-cyan hover:bg-cyan-400 text-gaming-dark">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Money
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-gaming-navy border-gray-600 text-white">
+                    <DialogHeader>
+                      <DialogTitle>Add Money to Wallet</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="amount">Amount (₹)</Label>
+                        <Input
+                          id="amount"
+                          type="number"
+                          placeholder="Enter amount"
+                          value={addAmount}
+                          onChange={(e) => setAddAmount(e.target.value)}
+                          className="bg-gaming-dark border-gray-600 text-white"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {["100", "500", "1000", "2000"].map((amount) => (
+                          <Button
+                            key={amount}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setAddAmount(amount)}
+                            className="border-gray-600 hover:bg-gaming-cyan hover:text-gaming-dark"
+                          >
+                            ₹{amount}
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        onClick={handleAddMoney}
+                        disabled={addMoneyMutation.isPending}
+                        className="w-full bg-gaming-cyan hover:bg-cyan-400 text-gaming-dark"
+                      >
+                        {addMoneyMutation.isPending ? "Processing..." : "Add Money"}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardContent>
           </Card>
 
+          {/* UPI Withdrawal Card */}
           <Card className="glass-effect border-gray-600">
-            <CardContent className="p-6 text-center">
-              <Minus className="h-8 w-8 text-gaming-amber mb-3 mx-auto" />
-              <h3 className="text-sm text-gray-400 mb-1">UPI Withdrawal</h3>
-              <div className="text-sm text-gaming-amber mb-3">
-                Min: ₹50 | Processing: 2-24 hrs
-              </div>
-              <Dialog>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Minus className="h-6 w-6 text-gaming-amber" />
+                  <div>
+                    <h3 className="font-semibold text-white">UPI Withdrawal</h3>
+                    <p className="text-sm text-gray-400">Min: ₹50 | Processing: 2-24 hrs</p>
+                  </div>
+                </div>
+                <Dialog>
                 <DialogTrigger asChild>
                   <Button className="w-full bg-gaming-amber hover:bg-yellow-400 text-gaming-dark">
                     <Minus className="mr-2 h-4 w-4" />
@@ -415,24 +432,30 @@ export default function WalletPage() {
                   </div>
                 </DialogContent>
               </Dialog>
+              </div>
             </CardContent>
           </Card>
 
+          {/* Spin Wheel Card */}
           <Card className="glass-effect border-gray-600">
-            <CardContent className="p-6 text-center">
-              <Zap className="h-8 w-8 text-gaming-red mb-3 mx-auto" />
-              <h3 className="text-sm text-gray-400 mb-1">Spin Wheel</h3>
-              <div className="text-sm text-gaming-red mb-3">
-                Cost: 10 DIL | Win Cash & DIL
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Zap className="h-6 w-6 text-gaming-red" />
+                  <div>
+                    <h3 className="font-semibold text-white">Spin Wheel</h3>
+                    <p className="text-sm text-gray-400">Cost: 10 DIL | Win Cash & DIL</p>
+                  </div>
+                </div>
+                <Button 
+                  onClick={handleSpinWheel}
+                  disabled={spinWheelMutation.isPending || isSpinning || (dilData?.dilBalance || 0) < 10}
+                  className="bg-gaming-red hover:bg-red-600 text-white"
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  {isSpinning ? "Spinning..." : "Spin Now"}
+                </Button>
               </div>
-              <Button 
-                onClick={handleSpinWheel}
-                disabled={spinWheelMutation.isPending || isSpinning || (dilData?.dilBalance || 0) < 10}
-                className="w-full bg-gaming-red hover:bg-red-600 text-white"
-              >
-                <Zap className="mr-2 h-4 w-4" />
-                {isSpinning ? "Spinning..." : "Spin Now"}
-              </Button>
             </CardContent>
           </Card>
         </div>

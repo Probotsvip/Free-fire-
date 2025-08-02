@@ -3,11 +3,74 @@ import bcrypt from "bcrypt";
 
 export async function initializeSampleData() {
   try {
-    // Check if data already exists
+    // Check if users already exist 
     const existingUsers = await storage.getAllUsers();
     if (existingUsers.length > 0) {
-      console.log("Sample data already exists, skipping initialization");
+      console.log("Users already exist - initializing rewards and updating DIL...");
+      
+      // Initialize rewards if they don't exist
+      const existingRewards = await storage.getSpinWheelRewards();
+      if (existingRewards.length === 0) {
+        console.log("Initializing spin wheel rewards...");
+        await initializeRewards();
+      }
+      
+      // Update existing user DIL and medals
+      for (const user of existingUsers) {
+        if (user.dilBalance === 0) {
+          const dilAmount = user.role === 'admin' ? 100 : 50;
+          await storage.updateUserDilBalance(user.id, dilAmount);
+          await storage.updateUserMedals(user.id, user.role === 'admin' ? 8 : 3);
+        }
+      }
+      
+      console.log("DIL and rewards initialization complete!");
       return;
+    }
+
+    async function initializeRewards() {
+      // Initialize Spin Wheel Rewards
+      await storage.createSpinReward({
+        type: "cash",
+        value: "5.00",
+        probability: "0.25", // 25% chance
+        dilCost: 10,
+      });
+
+      await storage.createSpinReward({
+        type: "cash",
+        value: "10.00", 
+        probability: "0.15", // 15% chance
+        dilCost: 10,
+      });
+
+      await storage.createSpinReward({
+        type: "cash",
+        value: "25.00",
+        probability: "0.10", // 10% chance
+        dilCost: 10,
+      });
+
+      await storage.createSpinReward({
+        type: "cash",
+        value: "50.00",
+        probability: "0.05", // 5% chance
+        dilCost: 10,
+      });
+
+      await storage.createSpinReward({
+        type: "dil",
+        value: "15",
+        probability: "0.20", // 20% chance
+        dilCost: 10,
+      });
+
+      await storage.createSpinReward({
+        type: "dil",
+        value: "5",
+        probability: "0.25", // 25% chance (booby prize)
+        dilCost: 10,
+      });
     }
 
     console.log("Initializing sample data...");
@@ -245,6 +308,10 @@ export async function initializeSampleData() {
     await storage.updateUserDilBalance(user1.id, 50);
     await storage.updateUserDilBalance(user2.id, 35);
     await storage.updateUserDilBalance(user3.id, 75);
+
+    // Give admin user some initial DIL and medals too
+    await storage.updateUserDilBalance(admin.id, 100);
+    await storage.updateUserMedals(admin.id, 8);
 
     await storage.updateUserMedals(user1.id, 3);
     await storage.updateUserMedals(user2.id, 1);

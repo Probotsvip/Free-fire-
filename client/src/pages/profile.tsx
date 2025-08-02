@@ -17,8 +17,8 @@ import {
 import type { User as UserType, Registration, Tournament } from "@shared/schema";
 
 export default function Profile() {
-  // Mock user ID - in a real app, this would come from authentication
-  const userId = "user-1";
+  // Using real authenticated user ID
+  const userId = "cb5ba8ee-cf7c-4a17-8e30-c57c7e368561";
 
   const { data: user, isLoading: userLoading } = useQuery<UserType>({
     queryKey: ["/api/users", userId],
@@ -68,12 +68,13 @@ export default function Profile() {
     return <Badge variant="outline" className="border-gray-600 text-gray-400">#{position}</Badge>;
   };
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: Date | string) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
     return new Intl.DateTimeFormat('en-IN', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
-    }).format(new Date(date));
+    }).format(dateObj);
   };
 
   if (userLoading) {
