@@ -198,6 +198,73 @@ export async function initializeSampleData() {
       tournamentId: tournament2.id,
     });
 
+    // Initialize Spin Wheel Rewards
+    await storage.createSpinReward({
+      type: "cash",
+      value: "5.00",
+      probability: "0.25", // 25% chance
+      dilCost: 10,
+    });
+
+    await storage.createSpinReward({
+      type: "cash",
+      value: "10.00",
+      probability: "0.15", // 15% chance
+      dilCost: 10,
+    });
+
+    await storage.createSpinReward({
+      type: "cash",
+      value: "25.00",
+      probability: "0.10", // 10% chance
+      dilCost: 10,
+    });
+
+    await storage.createSpinReward({
+      type: "cash",
+      value: "50.00",
+      probability: "0.05", // 5% chance
+      dilCost: 10,
+    });
+
+    await storage.createSpinReward({
+      type: "dil",
+      value: "15",
+      probability: "0.20", // 20% chance
+      dilCost: 10,
+    });
+
+    await storage.createSpinReward({
+      type: "dil",
+      value: "5",
+      probability: "0.25", // 25% chance (booby prize)
+      dilCost: 10,
+    });
+
+    // Give users some initial DIL and medals
+    await storage.updateUserDilBalance(user1.id, 50);
+    await storage.updateUserDilBalance(user2.id, 35);
+    await storage.updateUserDilBalance(user3.id, 75);
+
+    await storage.updateUserMedals(user1.id, 3);
+    await storage.updateUserMedals(user2.id, 1);
+    await storage.updateUserMedals(user3.id, 5);
+
+    // Add some medals history
+    await storage.addUserMedal({
+      userId: user1.id,
+      medalType: "gold",
+      tournamentId: tournament1.id,
+      reason: "1st Place - PUBG Mobile Clash"
+    });
+
+    await storage.addUserMedal({
+      userId: user3.id,
+      medalType: "platinum",
+      tournamentId: tournament3.id,
+      reason: "10+ Kills Achievement"
+    });
+
     console.log("Sample data initialized successfully!");
     console.log("Admin credentials: admin@gamewin.com / admin123");
     console.log("User credentials: progamer@example.com / password123");

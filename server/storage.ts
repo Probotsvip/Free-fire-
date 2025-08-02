@@ -4,6 +4,12 @@ import {
   registrations,
   transactions,
   notifications,
+  spinWheelRewards,
+  spinHistory,
+  userMedals,
+  referrals,
+  dailyBonuses,
+  tournamentTemplates,
   type User, 
   type InsertUser, 
   type UpsertUser,
@@ -14,7 +20,19 @@ import {
   type Transaction,
   type InsertTransaction,
   type Notification,
-  type InsertNotification
+  type InsertNotification,
+  type SpinWheelReward,
+  type InsertSpinReward,
+  type SpinHistory,
+  type InsertSpinHistory,
+  type UserMedal,
+  type InsertUserMedal,
+  type Referral,
+  type InsertReferral,
+  type DailyBonus,
+  type InsertDailyBonus,
+  type TournamentTemplate,
+  type InsertTournamentTemplate
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql, count } from "drizzle-orm";
@@ -58,6 +76,43 @@ export interface IStorage {
 
   // Leaderboard
   getTopEarners(limit?: number): Promise<(User & { weeklyEarnings?: string })[]>;
+
+  // DIL & Rewards System
+  updateUserDilBalance(userId: string, dilAmount: number): Promise<User>;
+  updateUserMedals(userId: string, medalCount: number): Promise<User>;
+  addUserMedal(medal: InsertUserMedal): Promise<UserMedal>;
+  getUserMedals(userId: string): Promise<UserMedal[]>;
+
+  // Spin Wheel System
+  getSpinWheelRewards(): Promise<SpinWheelReward[]>;
+  createSpinReward(reward: InsertSpinReward): Promise<SpinWheelReward>;
+  spinWheel(userId: string, dilCost: number): Promise<{ reward: SpinWheelReward; spinRecord: SpinHistory }>;
+  getUserSpinHistory(userId: string): Promise<SpinHistory[]>;
+
+  // Referral System
+  createReferral(referral: InsertReferral): Promise<Referral>;
+  getReferralsByReferrer(referrerId: string): Promise<Referral[]>;
+  getUserByReferralCode(referralCode: string): Promise<User | undefined>;
+
+  // Daily Bonus System
+  claimDailyBonus(userId: string): Promise<DailyBonus>;
+  getUserDailyBonuses(userId: string): Promise<DailyBonus[]>;
+  checkDailyBonusAvailable(userId: string): Promise<boolean>;
+
+  // Tournament Templates
+  getTournamentTemplates(): Promise<TournamentTemplate[]>;
+  createTournamentTemplate(template: InsertTournamentTemplate): Promise<TournamentTemplate>;
+
+  // Enhanced Tournament Features
+  updateRegistrationWithRewards(registrationId: string, data: {
+    position?: number;
+    kills?: number;
+    earnings?: string;
+    dilEarned?: number;
+    killBonusEarned?: string;
+    medalEarned?: number;
+    resultScreenshot?: string;
+  }): Promise<Registration>;
 
   // Admin
   getAllUsers(): Promise<User[]>;
@@ -235,6 +290,27 @@ export class DatabaseStorage implements IStorage {
     return registration;
   }
 
+  async updateRegistrationWithRewards(registrationId: string, data: {
+    position?: number;
+    kills?: number;
+    earnings?: string;
+    dilEarned?: number;
+    killBonusEarned?: string;
+    medalEarned?: number;
+    resultScreenshot?: string;
+  }): Promise<Registration> {
+    const [registration] = await db
+      .update(registrations)
+      .set({
+        ...data,
+        isResultVerified: true
+      })
+      .where(eq(registrations.id, registrationId))
+      .returning();
+    if (!registration) throw new Error("Registration not found");
+    return registration;
+  }
+
   // Transactions
   async createTransaction(insertTransaction: InsertTransaction): Promise<Transaction> {
     const [transaction] = await db
@@ -322,6 +398,226 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .where(eq(users.isActive, true));
     return result.count;
+  }
+
+  // DIL & Rewards System Implementation
+  async updateUserDilBalance(userId: string, dilAmount: number): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ 
+        dilBalance: sql`${users.dilBalance} + ${dilAmount}`,
+        totalDilEarned: sql`${users.totalDilEarned} + ${dilAmount > 0 ? dilAmount : 0}`,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    if (!user) throw new Error("User not found");
+    return user;
+  }
+
+  async updateUserMedals(userId: string, medalCount: number): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ 
+        medals: sql`${users.medals} + ${medalCount}`,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    if (!user) throw new Error("User not found");
+    return user;
+  }
+
+  async addUserMedal(insertMedal: InsertUserMedal): Promise<UserMedal> {
+    const [medal] = await db
+      .insert(userMedals)
+      .values(insertMedal)
+      .returning();
+    return medal;
+  }
+
+  async getUserMedals(userId: string): Promise<UserMedal[]> {
+    return await db
+      .select()
+      .from(userMedals)
+      .where(eq(userMedals.userId, userId))
+      .orderBy(desc(userMedals.earnedAt));
+  }
+
+  // Spin Wheel System Implementation
+  async getSpinWheelRewards(): Promise<SpinWheelReward[]> {
+    return await db
+      .select()
+      .from(spinWheelRewards)
+      .where(eq(spinWheelRewards.isActive, true))
+      .orderBy(spinWheelRewards.probability);
+  }
+
+  async createSpinReward(insertReward: InsertSpinReward): Promise<SpinWheelReward> {
+    const [reward] = await db
+      .insert(spinWheelRewards)
+      .values(insertReward)
+      .returning();
+    return reward;
+  }
+
+  async spinWheel(userId: string, dilCost: number): Promise<{ reward: SpinWheelReward; spinRecord: SpinHistory }> {
+    // Get available rewards
+    const rewards = await this.getSpinWheelRewards();
+    if (rewards.length === 0) throw new Error("No rewards available");
+
+    // Calculate weighted random selection
+    const random = Math.random();
+    let cumulativeProbability = 0;
+    let selectedReward = rewards[0];
+
+    for (const reward of rewards) {
+      cumulativeProbability += parseFloat(reward.probability);
+      if (random <= cumulativeProbability) {
+        selectedReward = reward;
+        break;
+      }
+    }
+
+    // Deduct DIL from user
+    await this.updateUserDilBalance(userId, -dilCost);
+
+    // Create spin history record
+    const [spinRecord] = await db
+      .insert(spinHistory)
+      .values({
+        userId,
+        rewardId: selectedReward.id,
+        rewardType: selectedReward.type,
+        rewardValue: selectedReward.value,
+        dilSpent: dilCost
+      })
+      .returning();
+
+    // Award the reward to user
+    if (selectedReward.type === "cash") {
+      const newBalance = sql`${users.balance} + ${selectedReward.value}`;
+      await db.update(users).set({ balance: newBalance }).where(eq(users.id, userId));
+      
+      // Create transaction record
+      await this.createTransaction({
+        userId,
+        type: "spin_reward",
+        amount: selectedReward.value,
+        description: `Spin wheel reward: ₹${selectedReward.value}`
+      });
+    } else if (selectedReward.type === "dil") {
+      await this.updateUserDilBalance(userId, parseInt(selectedReward.value));
+    }
+
+    return { reward: selectedReward, spinRecord };
+  }
+
+  async getUserSpinHistory(userId: string): Promise<SpinHistory[]> {
+    return await db
+      .select()
+      .from(spinHistory)
+      .where(eq(spinHistory.userId, userId))
+      .orderBy(desc(spinHistory.spunAt))
+      .limit(50);
+  }
+
+  // Referral System Implementation
+  async createReferral(insertReferral: InsertReferral): Promise<Referral> {
+    const [referral] = await db
+      .insert(referrals)
+      .values(insertReferral)
+      .returning();
+    return referral;
+  }
+
+  async getReferralsByReferrer(referrerId: string): Promise<Referral[]> {
+    return await db
+      .select()
+      .from(referrals)
+      .where(eq(referrals.referrerId, referrerId))
+      .orderBy(desc(referrals.createdAt));
+  }
+
+  async getUserByReferralCode(referralCode: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.referralCode, referralCode));
+    return user;
+  }
+
+  // Daily Bonus System Implementation
+  async claimDailyBonus(userId: string): Promise<DailyBonus> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [bonus] = await db
+      .insert(dailyBonuses)
+      .values({
+        userId,
+        bonusDate: today,
+        dilReward: 5,
+        cashReward: "10.00",
+        claimedAt: new Date()
+      })
+      .returning();
+
+    // Add DIL and cash to user
+    await this.updateUserDilBalance(userId, 5);
+    const newBalance = sql`${users.balance} + 10.00`;
+    await db.update(users).set({ balance: newBalance }).where(eq(users.id, userId));
+
+    // Create transaction
+    await this.createTransaction({
+      userId,
+      type: "bonus",
+      amount: "10.00",
+      description: "Daily login bonus"
+    });
+
+    return bonus;
+  }
+
+  async getUserDailyBonuses(userId: string): Promise<DailyBonus[]> {
+    return await db
+      .select()
+      .from(dailyBonuses)
+      .where(eq(dailyBonuses.userId, userId))
+      .orderBy(desc(dailyBonuses.bonusDate))
+      .limit(30);
+  }
+
+  async checkDailyBonusAvailable(userId: string): Promise<boolean> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [existing] = await db
+      .select()
+      .from(dailyBonuses)
+      .where(and(
+        eq(dailyBonuses.userId, userId),
+        eq(dailyBonuses.bonusDate, today)
+      ));
+
+    return !existing;
+  }
+
+  // Tournament Templates Implementation
+  async getTournamentTemplates(): Promise<TournamentTemplate[]> {
+    return await db
+      .select()
+      .from(tournamentTemplates)
+      .where(eq(tournamentTemplates.isActive, true))
+      .orderBy(tournamentTemplates.entryFee);
+  }
+
+  async createTournamentTemplate(insertTemplate: InsertTournamentTemplate): Promise<TournamentTemplate> {
+    const [template] = await db
+      .insert(tournamentTemplates)
+      .values(insertTemplate)
+      .returning();
+    return template;
   }
 }
 

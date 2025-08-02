@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,19 +6,27 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Wallet, Plus, Minus, History, Gift, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Wallet, Plus, Minus, History, Gift, ArrowUpRight, ArrowDownLeft, Heart, Zap, Award } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Transaction, User } from "@shared/schema";
+import type { Transaction, User, SpinWheelReward, SpinHistory } from "@shared/schema";
 
 export default function WalletPage() {
   const [addAmount, setAddAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawMethod, setWithdrawMethod] = useState<"upi" | "gift_card">("upi");
+  const [upiId, setUpiId] = useState("");
+  const [giftCardType, setGiftCardType] = useState("google_play");
+  const [spinRewards, setSpinRewards] = useState<SpinWheelReward[]>([]);
+  const [isSpinning, setIsSpinning] = useState(false);
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Mock user ID - in a real app, this would come from authentication
-  const userId = "user-1";
+  const userId = "cb5ba8ee-cf7c-4a17-8e30-c57c7e368561"; // Using the actual user ID from auth
 
   const { data: user, isLoading: userLoading } = useQuery<User>({
     queryKey: ["/api/users", userId],
@@ -26,6 +34,22 @@ export default function WalletPage() {
 
   const { data: transactions = [], isLoading: transactionsLoading } = useQuery<Transaction[]>({
     queryKey: ["/api/users", userId, "transactions"],
+  });
+
+  const { data: dilData, isLoading: dilLoading } = useQuery({
+    queryKey: ["/api/users", userId, "dil-balance"],
+  });
+
+  const { data: spinRewardsData } = useQuery<SpinWheelReward[]>({
+    queryKey: ["/api/spin-wheel/rewards"],
+  });
+
+  const { data: spinHistory = [] } = useQuery<SpinHistory[]>({
+    queryKey: ["/api/users", userId, "spin-history"],
+  });
+
+  const { data: dailyBonusAvailable } = useQuery({
+    queryKey: ["/api/users", userId, "daily-bonus/available"],
   });
 
   const addMoneyMutation = useMutation({
@@ -49,6 +73,71 @@ export default function WalletPage() {
     },
   });
 
+  const withdrawMutation = useMutation({
+    mutationFn: (data: any) => 
+      apiRequest("POST", `/api/users/${userId}/withdraw`, data),
+    onSuccess: (response: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users", userId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", userId, "transactions"] });
+      toast({
+        title: "Withdrawal Request Submitted",
+        description: `Your withdrawal will be processed in ${response.processingTime}`,
+      });
+      setWithdrawAmount("");
+      setUpiId("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Withdrawal Failed",
+        description: error.message || "Please try again later.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const spinWheelMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/spin-wheel/spin", { dilCost: 10 }),
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users", userId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", userId, "dil-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", userId, "spin-history"] });
+      
+      toast({
+        title: "🎉 Spin Result!",
+        description: `You won ${result.reward.type === "cash" ? "₹" + result.reward.value : result.reward.value + " DIL"}!`,
+      });
+      setIsSpinning(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Spin Failed",
+        description: error.message || "Please try again later.",
+        variant: "destructive",
+      });
+      setIsSpinning(false);
+    },
+  });
+
+  const claimDailyBonusMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/users/${userId}/daily-bonus/claim`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users", userId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", userId, "dil-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", userId, "daily-bonus/available"] });
+      toast({
+        title: "Daily Bonus Claimed!",
+        description: "You received ₹10 + 5 DIL",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Bonus Claim Failed",
+        description: error.message || "Already claimed today",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAddMoney = () => {
     if (!addAmount || parseFloat(addAmount) <= 0) {
       toast({
@@ -59,6 +148,47 @@ export default function WalletPage() {
       return;
     }
     addMoneyMutation.mutate(addAmount);
+  };
+
+  const handleWithdraw = () => {
+    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid withdrawal amount.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (withdrawMethod === "upi" && !upiId) {
+      toast({
+        title: "UPI ID Required",
+        description: "Please enter your UPI ID.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    withdrawMutation.mutate({
+      amount: withdrawAmount,
+      method: withdrawMethod,
+      upiId: withdrawMethod === "upi" ? upiId : undefined,
+      giftCardType: withdrawMethod === "gift_card" ? giftCardType : undefined,
+    });
+  };
+
+  const handleSpinWheel = () => {
+    if (!dilData || dilData.dilBalance < 10) {
+      toast({
+        title: "Insufficient DIL",
+        description: "You need at least 10 DIL to spin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSpinning(true);
+    spinWheelMutation.mutate();
   };
 
   const getTransactionIcon = (type: string) => {
@@ -116,15 +246,75 @@ export default function WalletPage() {
           <p className="text-gray-400">Manage your gaming funds and transaction history</p>
         </div>
 
-        {/* Wallet Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {/* Enhanced Wallet Overview Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card className="glass-effect border-gray-600">
             <CardContent className="p-6 text-center">
               <Wallet className="h-8 w-8 text-gaming-cyan mb-3 mx-auto" />
-              <h3 className="text-sm text-gray-400 mb-1">Current Balance</h3>
+              <h3 className="text-sm text-gray-400 mb-1">Cash Balance</h3>
               <div className="text-2xl font-bold text-gaming-green">
                 ₹{user?.balance || "0.00"}
+              </div></CardContent>
+          </Card>
+
+          <Card className="glass-effect border-gray-600">
+            <CardContent className="p-6 text-center">
+              <Heart className="h-8 w-8 text-gaming-red mb-3 mx-auto" />
+              <h3 className="text-sm text-gray-400 mb-1">DIL Balance</h3>
+              <div className="text-2xl font-bold text-gaming-red">
+                {dilData?.dilBalance || 0}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-effect border-gray-600">
+            <CardContent className="p-6 text-center">
+              <Award className="h-8 w-8 text-gaming-amber mb-3 mx-auto" />
+              <h3 className="text-sm text-gray-400 mb-1">Medals</h3>
+              <div className="text-2xl font-bold text-gaming-amber">
+                {user?.medals || 0}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-effect border-gray-600">
+            <CardContent className="p-6 text-center">
+              <Zap className="h-8 w-8 text-gaming-purple mb-3 mx-auto" />
+              <h3 className="text-sm text-gray-400 mb-1">Total DIL Earned</h3>
+              <div className="text-2xl font-bold text-gaming-purple">
+                {dilData?.totalDilEarned || 0}
+              </div></CardContent>
+          </Card>
+        </div>
+
+        {/* Daily Bonus Banner */}
+        {dailyBonusAvailable?.available && (
+          <Card className="bg-gradient-to-r from-gaming-purple/20 to-gaming-cyan/20 border-gaming-border mb-6">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Gift className="h-6 w-6 text-gaming-amber" />
+                  <div>
+                    <h3 className="font-semibold text-gaming-amber">Daily Bonus Available!</h3>
+                    <p className="text-sm text-gray-400">Claim your ₹10 + 5 DIL daily reward</p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => claimDailyBonusMutation.mutate()}
+                  disabled={claimDailyBonusMutation.isPending}
+                  className="bg-gaming-amber hover:bg-gaming-amber/80 text-gaming-dark"
+                >
+                  {claimDailyBonusMutation.isPending ? "Claiming..." : "Claim Now"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Enhanced Action Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <Card className="glass-effect border-gray-600">
+            <CardContent className="p-6 text-center">
               <Dialog>
                 <DialogTrigger asChild>
                   <Button className="mt-3 w-full bg-gaming-cyan hover:bg-cyan-400 text-gaming-dark">
@@ -176,28 +366,72 @@ export default function WalletPage() {
 
           <Card className="glass-effect border-gray-600">
             <CardContent className="p-6 text-center">
-              <Gift className="h-8 w-8 text-gaming-amber mb-3 mx-auto" />
-              <h3 className="text-sm text-gray-400 mb-1">Total Winnings</h3>
-              <div className="text-2xl font-bold text-gaming-amber">
-                ₹{user?.totalEarnings || "0.00"}
+              <Minus className="h-8 w-8 text-gaming-amber mb-3 mx-auto" />
+              <h3 className="text-sm text-gray-400 mb-1">UPI Withdrawal</h3>
+              <div className="text-sm text-gaming-amber mb-3">
+                Min: ₹50 | Processing: 2-24 hrs
               </div>
-              <Button 
-                className="mt-3 w-full bg-gaming-amber hover:bg-yellow-400 text-gaming-dark"
-                disabled
-              >
-                <Minus className="mr-2 h-4 w-4" />
-                Withdraw (Soon)
-              </Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="w-full bg-gaming-amber hover:bg-yellow-400 text-gaming-dark">
+                    <Minus className="mr-2 h-4 w-4" />
+                    Withdraw to UPI
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-gaming-navy border-gray-600 text-white">
+                  <DialogHeader>
+                    <DialogTitle>UPI Withdrawal</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="withdraw-amount">Amount (₹)</Label>
+                      <Input
+                        id="withdraw-amount"
+                        type="number"
+                        placeholder="Minimum ₹50"
+                        value={withdrawAmount}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        className="bg-gaming-dark border-gray-600 text-white"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="upi-id">UPI ID</Label>
+                      <Input
+                        id="upi-id"
+                        type="text"
+                        placeholder="example@paytm"
+                        value={upiId}
+                        onChange={(e) => setUpiId(e.target.value)}
+                        className="bg-gaming-dark border-gray-600 text-white"
+                      />
+                    </div>
+                    <Button
+                      onClick={handleWithdraw}
+                      disabled={withdrawMutation.isPending}
+                      className="w-full bg-gaming-amber hover:bg-yellow-400 text-gaming-dark"
+                    >
+                      {withdrawMutation.isPending ? "Processing..." : "Withdraw"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
 
           <Card className="glass-effect border-gray-600">
             <CardContent className="p-6 text-center">
-              <Gift className="h-8 w-8 text-gaming-purple mb-3 mx-auto" />
-              <h3 className="text-sm text-gray-400 mb-1">Bonus Available</h3>
-              <div className="text-2xl font-bold text-gaming-purple">₹450</div>
-              <Button className="mt-3 w-full bg-gaming-purple hover:bg-purple-600 text-white">
-                Use Bonus
+              <Zap className="h-8 w-8 text-gaming-red mb-3 mx-auto" />
+              <h3 className="text-sm text-gray-400 mb-1">Spin Wheel</h3>
+              <div className="text-sm text-gaming-red mb-3">
+                Cost: 10 DIL | Win Cash & DIL
+              </div>
+              <Button 
+                onClick={handleSpinWheel}
+                disabled={spinWheelMutation.isPending || isSpinning || (dilData?.dilBalance || 0) < 10}
+                className="w-full bg-gaming-red hover:bg-red-600 text-white"
+              >
+                <Zap className="mr-2 h-4 w-4" />
+                {isSpinning ? "Spinning..." : "Spin Now"}
               </Button>
             </CardContent>
           </Card>

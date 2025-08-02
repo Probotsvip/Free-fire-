@@ -440,6 +440,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DIL & Rewards API Routes
+  app.get("/api/users/:userId/dil-balance", async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json({ dilBalance: user.dilBalance, totalDilEarned: user.totalDilEarned });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch DIL balance" });
+    }
+  });
+
+  app.get("/api/users/:userId/medals", async (req, res) => {
+    try {
+      const medals = await storage.getUserMedals(req.params.userId);
+      res.json(medals);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch medals" });
+    }
+  });
+
+  // Spin Wheel API Routes
+  app.get("/api/spin-wheel/rewards", async (req, res) => {
+    try {
+      const rewards = await storage.getSpinWheelRewards();
+      res.json(rewards);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch spin rewards" });
+    }
+  });
+
+  app.post("/api/spin-wheel/spin", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { dilCost = 10 } = req.body;
+
+      // Check user's DIL balance
+      const user = await storage.getUser(userId);
+      if (!user || user.dilBalance < dilCost) {
+        return res.status(400).json({ message: "Insufficient DIL balance" });
+      }
+
+      const result = await storage.spinWheel(userId, dilCost);
+      res.json(result);
+    } catch (error) {
+      console.error("Spin wheel error:", error);
+      res.status(500).json({ message: "Failed to spin wheel" });
+    }
+  });
+
+  app.get("/api/users/:userId/spin-history", async (req, res) => {
+    try {
+      const history = await storage.getUserSpinHistory(req.params.userId);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch spin history" });
+    }
+  });
+
+  // Daily Bonus API Routes
+  app.get("/api/users/:userId/daily-bonus/available", async (req, res) => {
+    try {
+      const available = await storage.checkDailyBonusAvailable(req.params.userId);
+      res.json({ available });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to check daily bonus" });
+    }
+  });
+
+  app.post("/api/users/:userId/daily-bonus/claim", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.params.userId;
+      if (req.user?.id !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const available = await storage.checkDailyBonusAvailable(userId);
+      if (!available) {
+        return res.status(400).json({ message: "Daily bonus already claimed today" });
+      }
+
+      const bonus = await storage.claimDailyBonus(userId);
+      res.json(bonus);
+    } catch (error) {
+      console.error("Daily bonus claim error:", error);
+      res.status(500).json({ message: "Failed to claim daily bonus" });
+    }
+  });
+
+  // Enhanced Withdrawal Routes with UPI and Gift Cards
+  app.post("/api/users/:userId/withdraw", isAuthenticated, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.params.userId;
+      if (req.user?.id !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const { amount, method, upiId, giftCardType } = req.body;
+
+      if (!amount || parseFloat(amount) <= 0) {
+        return res.status(400).json({ message: "Invalid withdrawal amount" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (parseFloat(user.balance) < parseFloat(amount)) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+
+      // Minimum withdrawal check
+      const minWithdrawal = method === "gift_card" ? 100 : 50;
+      if (parseFloat(amount) < minWithdrawal) {
+        return res.status(400).json({ 
+          message: `Minimum withdrawal amount is ₹${minWithdrawal} for ${method === "gift_card" ? "gift cards" : "UPI"}` 
+        });
+      }
+
+      // Create withdrawal transaction
+      let description = "";
+      if (method === "upi") {
+        description = `UPI withdrawal to ${upiId}`;
+      } else if (method === "gift_card") {
+        description = `${giftCardType} gift card redemption`;
+      } else {
+        return res.status(400).json({ message: "Invalid withdrawal method" });
+      }
+
+      // Deduct from user balance
+      const newBalance = (parseFloat(user.balance) - parseFloat(amount)).toFixed(2);
+      await storage.updateUserBalance(userId, newBalance);
+
+      // Create transaction record
+      const transaction = await storage.createTransaction({
+        userId,
+        type: "withdraw",
+        amount: `-${amount}`,
+        description,
+        upiId: method === "upi" ? upiId : undefined,
+        status: "pending"
+      });
+
+      res.json({
+        message: "Withdrawal request submitted successfully",
+        transaction,
+        processingTime: method === "upi" ? "2-24 hours" : "1-3 business days"
+      });
+    } catch (error) {
+      console.error("Withdrawal error:", error);
+      res.status(500).json({ message: "Failed to process withdrawal" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

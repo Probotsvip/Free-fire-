@@ -29,13 +29,9 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/tournaments" component={Tournaments} />
       <Route path="/leaderboard" component={Leaderboard} />
-      {isAuthenticated && (
-        <>
-          <Route path="/wallet" component={Wallet} />
-          <Route path="/profile" component={Profile} />
-          {isAdmin && <Route path="/admin" component={AdminPanel} />}
-        </>
-      )}
+      <Route path="/wallet" component={Wallet} />
+      <Route path="/profile" component={Profile} />
+      {isAdmin && <Route path="/admin" component={AdminPanel} />}
       <Route component={NotFound} />
     </Switch>
   );
