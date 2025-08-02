@@ -1,6 +1,6 @@
 # Overview
 
-GameWin is a full-stack gaming tournament platform that allows users to participate in PUBG and Free Fire tournaments, compete for prize money, and track their performance on leaderboards. The application features a modern React frontend with a Node.js/Express backend, supporting tournament registration, wallet management, and real-time tournament tracking.
+GameWin is a comprehensive Free Fire tournament platform with advanced reward systems, loyalty features, and monetization capabilities similar to MPL, WinZO, and PlayerzPot. Users can participate in Free Fire tournaments, earn DIL (hearts), medals, and real money prizes through an engaging gamified experience. The platform features custom room management, anti-cheat systems, spin wheels, referral programs, and VIP memberships.
 
 # User Preferences
 
@@ -37,10 +37,16 @@ Preferred communication style: Simple, everyday language.
 - **Connection**: Neon Database serverless PostgreSQL instance
 
 **Data Models**:
-- Users: Profile management, balance tracking, tournament statistics
-- Tournaments: Game details, prize pools, player limits, scheduling
-- Registrations: User-tournament relationships with performance tracking
-- Transactions: Financial operations for wallet management
+- Users: Enhanced profiles with Free Fire UID, DIL balance, medals, trophies, VIP status, referral codes
+- Tournaments: Advanced tournament system with kill bonuses, DIL rewards, medal distribution, VIP-only matches
+- Registrations: Result verification with screenshot uploads, bonus tracking, medal awards
+- Transactions: Complete payment gateway integration with UPI/Razorpay support, multiple transaction types
+- Spin Wheel System: Reward distribution with probability-based prizes using DIL currency
+- Medal System: Achievement tracking with bronze/silver/gold/platinum/diamond medals
+- Referral System: User acquisition with bonus rewards for referrers and referees
+- VIP Benefits: Premium membership with exclusive tournaments and enhanced rewards
+- Daily Bonuses: Loyalty retention with daily DIL and cash rewards
+- Tournament Templates: Quick tournament creation with predefined prize structures
 
 ## External Dependencies
 
